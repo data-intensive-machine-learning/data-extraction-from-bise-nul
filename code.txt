@@ -1,0 +1,107 @@
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import Select
+import pandas as pd
+import time
+
+# Define the URL and the selected values
+url = 'http://www.bisesargodha.edu.pk/content/boardresult.aspx'
+selected_exam = '2'
+selected_year = '2022-2'
+selected_session = '1'
+
+# Read roll numbers from the text file
+with open('D:\\db\\1\\1.txt', 'r') as file:
+
+
+    roll_numbers = [line.strip() for line in file]
+
+# Initialize the WebDriver
+driver = webdriver.Chrome()
+
+# Create an empty list to store the results
+results = []
+
+try:
+    driver.get(url)
+
+    for roll_number in roll_numbers:
+        try:
+            # Select exam
+            exam_dropdown = Select(WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'ContentPlaceHolder1_DDLExam'))
+            ))
+            exam_dropdown.select_by_value(selected_exam)
+
+            # Select year
+            year_dropdown = Select(WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'ContentPlaceHolder1_DDLExamYear'))
+            ))
+            year_dropdown.select_by_value(selected_year)
+
+            # Select session
+            session_dropdown = Select(WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'ContentPlaceHolder1_DDLExamSession2'))
+            ))
+            session_dropdown.select_by_value(selected_session)
+
+            # Send roll number
+            roll_input = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'ContentPlaceHolder1_TxtSearchText'))
+            )
+            roll_input.clear()
+            roll_input.send_keys(roll_number)
+
+            # Click "Show Result"
+            show_result_button = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'ContentPlaceHolder1_BtnShowResults'))
+            )
+            show_result_button.click()
+
+            # Wait for a short period for the results to load
+            time.sleep(0.5)
+
+            # Extract the information using XPath
+            roll_no = driver.find_element(By.XPATH, '/html/body/table/tbody/tr/td/div/form/div[3]/table/tbody/tr[5]/td/div[2]/table/tbody/tr[3]/td/table/tbody/tr[1]/td[2]/span').text
+            candidate_name = driver.find_element(By.XPATH, '/html/body/table/tbody/tr/td/div/form/div[3]/table/tbody/tr[5]/td/div[2]/table/tbody/tr[3]/td/table/tbody/tr[2]/td[2]/span').text
+            father_name = driver.find_element(By.XPATH, '/html/body/table/tbody/tr/td/div/form/div[3]/table/tbody/tr[5]/td/div[2]/table/tbody/tr[3]/td/table/tbody/tr[3]/td[2]/span').text
+
+            # Fetch additional data from tr[17]td[2]
+            additional_data = driver.find_element(By.XPATH, '/html/body/table/tbody/tr/td/div/form/div[3]/table/tbody/tr[5]/td/div[2]/table/tbody/tr[3]/td/table/tbody/tr[16]/td[2]').text
+
+            subject_rows = driver.find_elements(By.XPATH, '/html/body/table/tbody/tr/td/div/form/div[3]/table/tbody/tr[5]/td/div[2]/table/tbody/tr[3]/td/table/tbody/tr[position() >= 7 and position() <= 13]')
+
+            if subject_rows:
+                subject_data = {}
+                for row in subject_rows:
+                    cols = row.find_elements(By.TAG_NAME, 'td')
+                    if len(cols) >= 3:
+                        subject_name = cols[0].text
+                        obtained_marks = cols[2].text
+
+                        subject_data[subject_name] = {
+                            'Obtained Marks': obtained_marks,
+                        }
+
+                # Include 'Additional Data' in the data dictionary
+                data = {'Roll No': roll_no, 'Candidate Name': candidate_name, 'Father\'s Name': father_name, 'Total Marks/Grade': additional_data}
+                data.update(subject_data)
+
+                results.append(data)
+            else:
+                print(f"No subjects found for roll number {roll_number}")
+
+        except Exception as e:
+            print(f"Error processing roll number {roll_number}: {e}")
+            continue
+
+finally:
+    driver.quit()
+
+# Create a DataFrame with 'Additional Data' field
+df = pd.DataFrame(results)
+
+# Save to an Excel file
+df.to_excel('finaldatamissing1.xlsx', index=False)
